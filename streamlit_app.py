@@ -25,14 +25,23 @@ except Exception as e:
 # ============ Load interview protocol from markdown ============
 
 def load_protocol():
-    """
-    Load the detailed interview protocol from interview_protocol.md.
-    """
+    """Load the detailed interview protocol from interview_protocol.md."""
     try:
         with open("interview_protocol.md", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        return "Interview protocol file not found. Please make sure 'interview_protocol.md' exists."
+        # Fallback protocol if file not found
+        return """Interview Protocol on Teachers' use of Area Models & Visual Representations
+
+Role: You are a mathematics education researcher specializing in multiplicative reasoning, 
+multidigit multiplication, and multidigit division.
+
+Interview Structure:
+- Part I: Focus on multidigit multiplication (approximately 5 questions)
+- Part II: Focus on multidigit division (approximately 5 questions)
+
+Ask open-ended questions, one at a time, focusing on algorithms, visual representations, 
+sequencing, and teacher rationale."""
 
 
 PROTOCOL_TEXT = load_protocol()
@@ -115,8 +124,8 @@ Please create a report with the following structure:
 - Any examples or classroom routines they mention
 
 ## Beliefs, Rationales, and Student Thinking
-- The teacher’s stated reasons for using particular algorithms/visuals
-- How they describe students’ understanding or misconceptions
+- The teacher's stated reasons for using particular algorithms/visuals
+- How they describe students' understanding or misconceptions
 - Any references to equity, differentiation, or supporting diverse learners
 
 ## Open Questions & Possible Follow-Ups
@@ -149,12 +158,35 @@ information as gaps rather than inventing content."""
         return f"Error generating report: {str(e)}"
 
 
+# ============ Auto-save function ============
+
+def auto_save_transcript():
+    """Automatically save transcript to JSON file"""
+    try:
+        filename = f"interview_{st.session_state.conversation_id}.json"
+        save_data = {
+            "session_id": st.session_state.conversation_id,
+            "timestamp": datetime.now().isoformat(),
+            "messages": st.session_state.messages,
+            "phase": st.session_state.phase,
+            "mult_questions": st.session_state.mult_questions,
+            "div_questions": st.session_state.div_questions,
+        }
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, indent=2, ensure_ascii=False)
+        
+        return filename
+    except Exception as e:
+        return None
+
+
 # ============ Initialize session state ============
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
     welcome = (
-        "Hello! I’m glad to have the opportunity to speak with you about how you teach "
+        "Hello! I'm glad to have the opportunity to speak with you about how you teach "
         "multiplication and division of whole numbers.\n\n"
         "To begin, thinking specifically about **multidigit multiplication**, "
         "what algorithms, strategies, or visuals do you typically use with your students, "
@@ -203,10 +235,10 @@ with st.sidebar:
     st.caption(f"Session: {st.session_state.conversation_id}")
 
     st.subheader("📊 Interview Status")
-    st.write(f"Phase: {st.session_state.phase}")
-    st.write(f"Multiplication questions asked: {st.session_state.mult_questions}")
-    st.write(f"Division questions asked: {st.session_state.div_questions}")
-    st.write(f"Total messages: {len(st.session_state.messages)}")
+    st.write(f"**Phase:** {st.session_state.phase}")
+    st.write(f"**Multiplication questions:** {st.session_state.mult_questions}")
+    st.write(f"**Division questions:** {st.session_state.div_questions}")
+    st.write(f"**Total messages:** {len(st.session_state.messages)}")
 
     st.markdown("---")
 
@@ -216,6 +248,9 @@ with st.sidebar:
 
     with col1:
         if st.button("🔄 New Session", use_container_width=True):
+            # Auto-save before clearing
+            if len(st.session_state.messages) > 2:
+                auto_save_transcript()
             st.session_state.clear()
             st.rerun()
 
@@ -244,7 +279,7 @@ with st.sidebar:
 
     if len(st.session_state.messages) < 6:
         remaining = 6 - len(st.session_state.messages)
-        st.info(f"💬 Please continue the interview ({remaining} more message(s) before report).")
+        st.info(f"💬 Continue the interview ({remaining} more message(s) before report).")
     else:
         st.success("✅ Ready to generate report")
 
@@ -286,6 +321,8 @@ with st.sidebar:
         - ask one open-ended question at a time  
         - focus on algorithms, visuals, and reasoning  
         - keep the conversation on multiplication and division
+        
+        **Auto-save:** Conversations are automatically saved every 4 messages.
         """)
 
 
@@ -299,17 +336,19 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Handle user input
-if prompt := st.chat_input("Reply as the teacher (or interviewer typing the teacher’s words)...", key="chat_input"):
+if prompt := st.chat_input("Reply as the teacher...", key="chat_input"):
     # Show user message
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
+    # Auto-save every 4 messages
+    if len(st.session_state.messages) % 4 == 0:
+        auto_save_transcript()
+
     # Decide if we should insert a fixed transition to division
     insert_transition = False
     if st.session_state.phase == "multiplication":
-        # 每当 AI 问一个问题，我们就给 mult_questions +1。
-        # 这里用户刚回答结束，准备问下一题，所以检查次数：
         if st.session_state.mult_questions >= 5 and st.session_state.div_questions == 0:
             insert_transition = True
 
@@ -320,7 +359,7 @@ if prompt := st.chat_input("Reply as the teacher (or interviewer typing the teac
             if insert_transition:
                 transition = (
                     "Thank you for sharing how you teach multidigit multiplication.\n\n"
-                    "Now let’s talk about **division**. Thinking about multidigit division "
+                    "Now let's talk about **division**. Thinking about multidigit division "
                     "(for example long division, partial quotients, or box/area methods), "
                     "what algorithms, strategies, or visuals do you usually use with your students, "
                     "and why do you choose those approaches?"
@@ -356,6 +395,8 @@ if prompt := st.chat_input("Reply as the teacher (or interviewer typing the teac
             elif st.session_state.phase == "division" and not insert_transition:
                 st.session_state.div_questions += 1
 
+    st.rerun()
+
 # Show report section if generated
 if st.session_state.report_generated and st.session_state.current_report:
     st.markdown("---")
@@ -367,5 +408,5 @@ if st.session_state.report_generated and st.session_state.current_report:
 # Footer
 st.markdown("---")
 st.caption("🧮 AI Math Interviewer | Qualitative interviews on multidigit multiplication & division")
-st.caption("💡 Designed to support research on teachers’ use of algorithms and visual representations.")
+st.caption("💡 Designed for research by Dr. Karl Kosko | Developed by James Pellegrino (AI Firefighter Course)")
 
