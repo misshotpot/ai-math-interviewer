@@ -38,16 +38,12 @@ CRITICAL RULES:
 - Ask follow-up questions for clarity and depth
 - Encourage specific classroom examples
 
-INTERVIEW STRUCTURE:
-Part I: Multidigit multiplication (≈5 questions)
-- Start with: "Hello! I'm glad to have the opportunity to speak with you about how you teach multiplication and division of whole numbers. First, let's talk about how you teach multiplication. I'd like you to think about which algorithms you teach students to use, if you use any manipulatives or visuals to teach these algorithms, and so forth. What algorithms, strategies, or visuals do you use and why do you use them?"
-- Before ending Part I, ask if there's anything else to discuss about multiplication
-- When ready to move on, say "Thank you very much for your answers!"
+INTERVIEW CONTEXT:
+You are currently in the middle of the interview. The introduction has already been completed.
+Continue asking thoughtful follow-up questions based on what the teacher shares.
 
-Part II: Multidigit division (≈5 questions)
-- Transition with: "Now let's talk about division. I'd like you to think about which algorithms you teach students to use, if you use any manipulatives or visuals to teach these algorithms, and so forth. What algorithms, strategies, or visuals do you use and why do you use them?"
-- Before ending, ask if there's anything else to discuss about division
-- When complete, thank them for participating
+Part I focuses on: Multidigit multiplication
+Part II focuses on: Multidigit division
 
 Remember: Be non-directive, non-leading, and genuinely curious about their teaching practices.
 """
@@ -110,7 +106,7 @@ def auto_save():
             "session_id": st.session_state.conversation_id,
             "timestamp": datetime.now().isoformat(),
             "messages": st.session_state.messages,
-            "phase": st.session_state.phase,
+            "interview_stage": st.session_state.get("interview_stage", "introduction"),
             "mult_questions": st.session_state.mult_questions,
             "div_questions": st.session_state.div_questions
         }
@@ -126,22 +122,20 @@ def auto_save():
 if "messages" not in st.session_state:
     st.session_state.messages = []
     welcome = (
-        "Hello! I'm glad to have the opportunity to speak with you about how you teach "
-        "multiplication and division of whole numbers.\n\n"
-        "To begin, thinking specifically about **multidigit multiplication**, "
-        "what algorithms, strategies, or visuals do you typically use with your students, "
-        "and why do you choose those approaches?"
+        "Hello! Thank you for participating in this interview.\n\n"
+        "Before we begin, could you please tell me a bit about yourself? "
+        "What is your name, what grade level do you teach, and which school or district are you from?"
     )
     st.session_state.messages.append({"role": "assistant", "content": welcome})
+
+if "interview_stage" not in st.session_state:
+    st.session_state.interview_stage = "introduction"  # 'introduction', 'self_intro', 'multiplication', 'division', 'done'
 
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-if "phase" not in st.session_state:
-    st.session_state.phase = "multiplication"
-
 if "mult_questions" not in st.session_state:
-    st.session_state.mult_questions = 1
+    st.session_state.mult_questions = 0  # Start at 0 since first question comes after intro
 
 if "div_questions" not in st.session_state:
     st.session_state.div_questions = 0
@@ -175,7 +169,14 @@ with st.sidebar:
     st.caption(f"Session: {st.session_state.conversation_id}")
 
     st.subheader("📊 Interview Status")
-    st.write(f"**Phase:** {st.session_state.phase}")
+    stage_display = {
+        "introduction": "Introduction - Participant Info",
+        "ready_to_start": "Ready to Begin",
+        "multiplication": "Part I - Multiplication",
+        "division": "Part II - Division"
+    }
+    current_stage = st.session_state.get("interview_stage", "introduction")
+    st.write(f"**Stage:** {stage_display.get(current_stage, current_stage)}")
     st.write(f"**Multiplication questions:** {st.session_state.mult_questions}")
     st.write(f"**Division questions:** {st.session_state.div_questions}")
     st.write(f"**Total messages:** {len(st.session_state.messages)}")
@@ -199,7 +200,7 @@ with st.sidebar:
                 "session_id": st.session_state.conversation_id,
                 "timestamp": datetime.now().isoformat(),
                 "messages": st.session_state.messages,
-                "phase": st.session_state.phase,
+                "interview_stage": st.session_state.get("interview_stage", "introduction"),
                 "mult_questions": st.session_state.mult_questions,
                 "div_questions": st.session_state.div_questions
             }
@@ -278,15 +279,44 @@ if prompt := st.chat_input("Reply as the teacher...", key="chat_input"):
 
     # Check if should transition to division
     insert_transition = False
-    if st.session_state.phase == "multiplication":
+    if st.session_state.get("interview_stage") == "multiplication":
         if st.session_state.mult_questions >= 5 and st.session_state.div_questions == 0:
             insert_transition = True
 
     # Generate AI response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            if insert_transition:
-                # Fixed transition message
+            # Handle different interview stages
+            if st.session_state.interview_stage == "introduction":
+                # After participant introduces themselves, AI introduces itself
+                response_text = (
+                    "Thank you for sharing that information! It's wonderful to meet you.\n\n"
+                    "Let me introduce myself: I'm an AI research interviewer specializing in mathematics education, "
+                    "particularly in how teachers approach multidigit multiplication and division. "
+                    "My research is informed by the work of scholars like Karl Kosko, Amy Hackenberg, and Les Steffe.\n\n"
+                    "Today, I'd like to learn about your teaching practices - specifically how you teach multidigit "
+                    "multiplication and division, what algorithms and visual representations you use, and why you make "
+                    "the instructional choices you do. This interview has two parts: first we'll discuss multiplication, "
+                    "then division.\n\n"
+                    "There are no right or wrong answers - I'm simply interested in understanding your approach and perspective. "
+                    "Shall we begin?"
+                )
+                st.session_state.interview_stage = "ready_to_start"
+            
+            elif st.session_state.interview_stage == "ready_to_start":
+                # Start with the first multiplication question
+                response_text = (
+                    "Wonderful! Let's begin with multiplication.\n\n"
+                    "Thinking specifically about **multidigit multiplication**, "
+                    "what algorithms, strategies, or visuals do you typically use with your students, "
+                    "and why do you choose those approaches?"
+                )
+                st.session_state.interview_stage = "multiplication"
+                st.session_state.phase = "multiplication"
+                st.session_state.mult_questions = 1
+            
+            elif insert_transition:
+                # Fixed transition message to division
                 response_text = (
                     "Thank you for sharing how you teach multidigit multiplication.\n\n"
                     "Now let's talk about **division**. Thinking about multidigit division "
@@ -295,9 +325,11 @@ if prompt := st.chat_input("Reply as the teacher...", key="chat_input"):
                     "and why do you choose those approaches?"
                 )
                 st.session_state.phase = "division"
+                st.session_state.interview_stage = "division"
                 st.session_state.div_questions = 1
+            
             else:
-                # Build messages for API
+                # Normal interview flow - call API
                 api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
                 for msg in st.session_state.messages[-20:]:
                     api_messages.append({"role": msg["role"], "content": msg["content"]})
@@ -319,10 +351,10 @@ if prompt := st.chat_input("Reply as the teacher...", key="chat_input"):
             # Save assistant response
             st.session_state.messages.append({"role": "assistant", "content": response_text})
 
-            # Update counters
-            if st.session_state.phase == "multiplication" and not insert_transition:
+            # Update counters (only during actual interview, not introduction)
+            if st.session_state.interview_stage == "multiplication" and not insert_transition:
                 st.session_state.mult_questions += 1
-            elif st.session_state.phase == "division" and not insert_transition:
+            elif st.session_state.interview_stage == "division" and not insert_transition:
                 st.session_state.div_questions += 1
 
     st.rerun()
@@ -339,4 +371,3 @@ if st.session_state.report_generated and st.session_state.current_report:
 # Footer
 st.markdown("---")
 st.caption("🧮 AI Math Interviewer | Research by Dr. Karl Kosko | Developed by James Pellegrino")
-
